@@ -52,9 +52,6 @@
   .lot-title { font-weight:700; margin-bottom:.45rem; }
   .inline-note { font-size:.85rem; color:#6b7280; margin:.2rem 0 .5rem; }
   .alert-line { margin-top:.4rem; font-size:.9rem; }
-
-  /* Pequeño estilo para el buscador de producto */
-  .prod-search { margin-bottom:.35rem; }
 </style>
 </head>
 <body>
@@ -62,7 +59,7 @@
   <h1>Entrega de turno – Esterilización Terminal</h1>
   <div class="sub">
     <span>Cálculo de teóricas (Turno ∩ Lote), casino, pausas, cambios de ciclo, paros y WhatsApp.</span>
-    <span class="version" id="app_version">et-1.0.1 · clic para recargar</span>
+    <span class="version" id="app_version">et-1.0.2 · clic para recargar</span>
   </div>
 </header>
 
@@ -130,7 +127,7 @@
 
 <script>
 (function(){
-  const APP_VERSION = 'et-1.0.1';
+  const APP_VERSION = 'et-1.0.2';
 
   // ================== PERFIL DE PLANTA (CONFIG) ==================
   const PROFILE = {
@@ -154,10 +151,7 @@
     pausasTrabajo: { cadaMinutos: 120, pausaMinutos: 10 },
 
     // Penalización por cambio de ciclo (minutos)
-    cicloPenalty: {
-      envase: 15,
-      empaque: 20
-    },
+    cicloPenalty: { envase: 15, empaque: 20 },
 
     // Productos con velocidades para ENVASE y EMPAQUE
     productos: [
@@ -299,26 +293,89 @@
       selectEl.appendChild(opt);
     });
   }
-  function filterSelectOptions(selectEl, query){
-    const q = (query||'').toLowerCase();
-    const current = selectEl.value;
-    // reconstruir
-    selectEl.innerHTML = '';
-    selectEl.appendChild(new Option('-- Seleccione --',''));
-    PROFILE.productos
-      .filter(p => p.label.toLowerCase().includes(q) || p.value.toLowerCase().includes(q))
-      .forEach(p => {
-        const opt=new Option(p.label, p.value);
-        opt.dataset.env = String(p.speedEnv);
-        opt.dataset.pack = String(p.speedPack);
-        selectEl.appendChild(opt);
-      });
-    // restaurar selección si corresponde
-    if ([...selectEl.options].some(o=>o.value===current)) {
-      selectEl.value = current;
-    } else {
-      selectEl.value = '';
+
+  // ========= Mejorador de búsqueda en <select> (sin input extra) =========
+  // - Construye un buffer con lo tecleado y salta al siguiente option cuyo label/value contenga ese texto.
+  // - Resetea el buffer si dejas de escribir más de 700 ms.
+  // - Enter repite la última búsqueda (cicla por coincidencias).
+  function enhanceSelectSearch(selectEl){
+    let buffer = '';
+    let lastQuery = '';
+    let lastIndex = -1;
+    let timer = null;
+
+    function resetBufferSoon(){
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(()=>{ buffer=''; }, 700);
     }
+
+    function optionsArray(){
+      return Array.from(selectEl.options);
+    }
+
+    function matchIndexes(query){
+      const q = query.toLowerCase();
+      const opts = optionsArray();
+      const idx = [];
+      for (let i=0;i<opts.length;i++){
+        const lbl = (opts[i].text || '').toLowerCase();
+        const val = (opts[i].value || '').toLowerCase();
+        if (q && (lbl.includes(q) || val.includes(q))) idx.push(i);
+      }
+      return idx;
+    }
+
+    function jumpToNext(query){
+      const matches = matchIndexes(query).filter(i => selectEl.options[i].value !== ''); // excluye placeholder
+      if (matches.length === 0) return;
+      // Encuentra el siguiente después de lastIndex; si no, el primero
+      let next = matches.find(i => i > lastIndex);
+      if (next === undefined) next = matches[0];
+      selectEl.selectedIndex = next;
+      // Desplazar visualmente en navegadores que muestran lista
+      try { selectEl.options[next].scrollIntoView?.({ block: 'nearest' }); } catch(e){}
+      lastIndex = next;
+      lastQuery = query;
+      // Disparar eventos para que se calcule velocidad/teóricas
+      selectEl.dispatchEvent(new Event('input', { bubbles:true }));
+      selectEl.dispatchEvent(new Event('change', { bubbles:true }));
+    }
+
+    selectEl.addEventListener('keydown', (e)=>{
+      // Teclas de control para ciclar con Enter
+      if (e.key === 'Enter'){
+        if (lastQuery){
+          e.preventDefault();
+          jumpToNext(lastQuery);
+        }
+        return;
+      }
+      // Ignorar navegación y modificadores
+      if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home','End','PageUp','PageDown','Tab','Escape'].includes(e.key)) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      // Caracter imprimible
+      if (e.key.length === 1){
+        buffer += e.key;
+        jumpToNext(buffer);
+        resetBufferSoon();
+      } else if (e.key === 'Backspace') {
+        buffer = buffer.slice(0, -1);
+        if (buffer) jumpToNext(buffer);
+        resetBufferSoon();
+      }
+    });
+
+    // Al cambiar selección manualmente, actualizamos índices
+    selectEl.addEventListener('change', ()=>{
+      lastIndex = selectEl.selectedIndex;
+    });
+    // Al enfocar, resetea buffer
+    selectEl.addEventListener('focus', ()=>{
+      buffer = '';
+      lastQuery = '';
+      lastIndex = selectEl.selectedIndex;
+    });
   }
 
   // ======= Plantillas UI =======
@@ -357,10 +414,10 @@
         <div class="lot-title">${title}</div>
         <div class="grid">
           <div class="col-12">
-            <label>Producto</label>
-            <input type="text" id="${prefix}_prod_search" class="prod-search" placeholder="Buscar producto..." />
+            <label for="${prefix}_producto">Producto</label>
             <select id="${prefix}_producto"></select>
             <div id="${prefix}_prod_err" class="error-msg">Seleccione un producto válido para asignar la velocidad programada.</div>
+            <div class="hint">Sugerencia: con la lista abierta, teclee parte del nombre para saltar entre coincidencias. Enter cicla por las coincidencias.</div>
           </div>
 
           <div class="col-6">
@@ -530,9 +587,10 @@
   buildEnvaseUI();
   buildEmpaqueUI();
 
-  // Rellenar selects de productos + primer filtro vacío
+  // Rellenar selects de productos y aplicar el “mejorador” de búsqueda
   document.querySelectorAll('select[id$="_producto"]').forEach(sel => {
     renderProductos(sel);
+    enhanceSelectSearch(sel);
   });
 
   // ======= Controlador de Lote (parametrizado) =======
@@ -541,12 +599,9 @@
     const speedSource = root?.dataset.speedSource || 'envase';
     const cicloPenalty = Number(root?.dataset.cicloPenalty || 0);
 
-    // Producto + búsqueda
-    const prod_search = document.getElementById(`${prefix}_prod_search`);
     const env_producto = document.getElementById(`${prefix}_producto`);
     const prod_err = document.getElementById(`${prefix}_prod_err`);
 
-    // Datos básicos
     const env_lote = document.getElementById(`${prefix}_lote`);
     const env_inicio = document.getElementById(`${prefix}_inicio`);
     const env_fin = document.getElementById(`${prefix}_fin`);
@@ -555,7 +610,6 @@
     const cambios_turno = document.getElementById(`${prefix}_ciclos_turno`);
     const ciclos_envasados = document.getElementById(`${prefix}_ciclos_envasados`);
 
-    // KPIs
     const unid_teoricas = document.getElementById(`${prefix}_unid_teoricas`);
     const unid_reales = document.getElementById(`${prefix}_unid_reales`);
     const productividad = document.getElementById(`${prefix}_productividad`);
@@ -587,9 +641,8 @@
       btn:  document.getElementById(`${prefix}_add_${c}`),
     }]));
     const parosData = { equipo:[], proceso:[], alistamiento:[], ausentismo:[], materiales:[] };
-    const ralistData = []; // <- NUEVO
+    const ralistData = [];
 
-    // Producto: helpers
     function getSelectedSpeed(){
       const val = env_producto.value || '';
       const v = getProductSpeed(val, speedSource);
@@ -600,8 +653,6 @@
       if (isFinite(v)) { vel_prog.value = v; prod_err && prod_err.classList.remove('show'); }
       else { vel_prog.value = ''; prod_err && prod_err.classList.add('show'); }
     }
-
-    // Atraso/Productividad
     function setAtrasoMinutos(minutos) {
       const min = Math.max(0, Math.round(Number(minutos || 0)));
       horas_atraso.value = String(min);
@@ -630,7 +681,6 @@
       setAtrasoMinutos(atrasoMin);
       atraso_formula.textContent = `Fórmula: ceil((${ut} – ${ur}) / ${velProg}) = ${atrasoMin} min`;
     }
-
     function validateParosVsAtraso(){
       const atrasoMin = Number(atraso_min_detalle.dataset.minutos || 'NaN');
       const tot = Number(paros_total.textContent || 0);
@@ -711,7 +761,6 @@
       });
     }
 
-    // Calcular
     function updateCalculos(){
       updateVelocidadProgramada();
 
@@ -797,7 +846,6 @@
       updateProductividad();
     }
 
-    // WhatsApp por lote
     function buildLotMessage(title){
       if(!env_producto.value) return '';
       const iniDT=parseDateTimeLocal(env_inicio.value); 
@@ -852,22 +900,12 @@
       return lines.join('\n');
     }
 
-    // Eventos UI
     ;[fecha,turnoSel,env_inicio,env_fin,vel_real,cambios_turno].forEach(el=>{
       el.addEventListener('input', updateCalculos);
       el.addEventListener('change', updateCalculos);
     });
     env_producto.addEventListener('change', ()=>{ updateVelocidadProgramada(); updateCalculos(); });
     env_producto.addEventListener('input',  ()=>{ updateVelocidadProgramada(); updateCalculos(); });
-
-    // Búsqueda en producto
-    if (prod_search){
-      prod_search.addEventListener('input', ()=>{
-        filterSelectOptions(env_producto, prod_search.value);
-        updateVelocidadProgramada();
-        updateCalculos();
-      });
-    }
 
     unid_reales.addEventListener('input',  ()=>{ updateProductividad(); recalcAtraso(); validateParosVsAtraso(); });
     unid_reales.addEventListener('change', ()=>{ updateProductividad(); recalcAtraso(); validateParosVsAtraso(); });
@@ -908,9 +946,6 @@
         return true;
       },
       clear: () => {
-        if (prod_search) prod_search.value='';
-        // restaurar lista completa de productos
-        filterSelectOptions(env_producto, '');
         env_producto.value='';
         env_lote.value=''; env_inicio.value=''; env_fin.value='';
         vel_prog.value=''; vel_real.value=''; unid_teoricas.value=''; unid_reales.value=''; productividad.value='';
@@ -922,7 +957,6 @@
         cats.forEach(renderParoList);
         paros_total.textContent='0'; paros_alerta.className='muted'; paros_alerta.textContent='Se validará contra el atraso calculado.';
 
-        // limpiar retraso alistamiento (múltiple)
         ralistData.splice(0, ralistData.length);
         renderRalistList();
       }
@@ -1152,24 +1186,7 @@
 
   if(!fecha.value){ fecha.valueAsDate = new Date(); }
 
-  // Inicial: primer cálculo vacío
-  // (Instanciación de lotes debe hacerse tras construir UI)
-  function initLotControllers(){
-    const lotPrefixes = [];
-    PROFILE.envase.secciones.forEach(sec=>{
-      for(let i=1;i<=PROFILE.envase.lotesPorSeccion;i++){
-        lotPrefixes.push(`env_${sec.toLowerCase()}_l${i}`);
-      }
-    });
-    PROFILE.empaque.secciones.forEach(sec=>{
-      for(let i=1;i<=PROFILE.empaque.lotesPorSeccion;i++){
-        lotPrefixes.push(`emp_${sec.toLowerCase()}_l${i}`);
-      }
-    });
-    return Object.fromEntries(lotPrefixes.map(p=>[p, setupLot(p)]));
-  }
-  // Ya lo hicimos arriba, solo refrescamos cálculos
-  // (LotControllers está disponible)
+  // Inicial: cálculos en blanco
   Object.values(LotControllers).forEach(C=>{ C.updateVelocidadProgramada(); C.updateCalculos(); C.updateProductividad(); });
 
 })();
