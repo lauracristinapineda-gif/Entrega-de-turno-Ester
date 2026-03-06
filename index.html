@@ -59,7 +59,7 @@
   <h1>Entrega de turno – Esterilización Terminal</h1>
   <div class="sub">
     <span>Cálculo de teóricas (Turno ∩ Lote), casino, pausas, cambios de ciclo, paros y WhatsApp.</span>
-    <span class="version" id="app_version">et-1.0.2 · clic para recargar</span>
+    <span class="version" id="app_version">et-1.0.3 · clic para recargar</span>
   </div>
 </header>
 
@@ -127,7 +127,7 @@
 
 <script>
 (function(){
-  const APP_VERSION = 'et-1.0.2';
+  const APP_VERSION = 'et-1.0.3';
 
   // ================== PERFIL DE PLANTA (CONFIG) ==================
   const PROFILE = {
@@ -276,105 +276,41 @@
     return { work, breaks: count*pz, count };
   }
 
-  // ======= Productos =======
-  function getProductSpeed(value, speedSource){ // speedSource: 'envase'|'empaque'
-    const p = PROFILE.productos.find(x => x.value === value);
+  // ======= Productos (con datalist) =======
+  function getProductByText(txt){
+    if(!txt) return null;
+    // Comparamos por label o value (insensible a mayúsculas)
+    const t = String(txt).trim().toLowerCase();
+    return PROFILE.productos.find(p =>
+      p.label.toLowerCase() === t || p.value.toLowerCase() === t
+    ) || PROFILE.productos.find(p =>
+      p.label.toLowerCase() === t // prioridad exacta por label
+    ) || null;
+  }
+  function getProductSpeedByText(txt, speedSource){
+    const p = getProductByText(txt);
     if(!p) return NaN;
-    if(speedSource === 'empaque') return Number(p.speedPack);
-    return Number(p.speedEnv);
+    return speedSource === 'empaque' ? Number(p.speedPack) : Number(p.speedEnv);
   }
-  function renderProductos(selectEl){
-    selectEl.innerHTML = '';
-    selectEl.appendChild(new Option('-- Seleccione --',''));
-    PROFILE.productos.forEach(p => {
-      const opt=new Option(p.label, p.value);
-      opt.dataset.env = String(p.speedEnv);
-      opt.dataset.pack = String(p.speedPack);
-      selectEl.appendChild(opt);
-    });
-  }
+  function renderProductosDatalist(prefix){
+    // Crea <input list="..."> y <datalist> por lote (si no existía)
+    const holder = document.getElementById(`${prefix}_prod_holder`);
+    if (!holder) return;
 
-  // ========= Mejorador de búsqueda en <select> (sin input extra) =========
-  // - Construye un buffer con lo tecleado y salta al siguiente option cuyo label/value contenga ese texto.
-  // - Resetea el buffer si dejas de escribir más de 700 ms.
-  // - Enter repite la última búsqueda (cicla por coincidencias).
-  function enhanceSelectSearch(selectEl){
-    let buffer = '';
-    let lastQuery = '';
-    let lastIndex = -1;
-    let timer = null;
-
-    function resetBufferSoon(){
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(()=>{ buffer=''; }, 700);
-    }
-
-    function optionsArray(){
-      return Array.from(selectEl.options);
-    }
-
-    function matchIndexes(query){
-      const q = query.toLowerCase();
-      const opts = optionsArray();
-      const idx = [];
-      for (let i=0;i<opts.length;i++){
-        const lbl = (opts[i].text || '').toLowerCase();
-        const val = (opts[i].value || '').toLowerCase();
-        if (q && (lbl.includes(q) || val.includes(q))) idx.push(i);
-      }
-      return idx;
-    }
-
-    function jumpToNext(query){
-      const matches = matchIndexes(query).filter(i => selectEl.options[i].value !== ''); // excluye placeholder
-      if (matches.length === 0) return;
-      // Encuentra el siguiente después de lastIndex; si no, el primero
-      let next = matches.find(i => i > lastIndex);
-      if (next === undefined) next = matches[0];
-      selectEl.selectedIndex = next;
-      // Desplazar visualmente en navegadores que muestran lista
-      try { selectEl.options[next].scrollIntoView?.({ block: 'nearest' }); } catch(e){}
-      lastIndex = next;
-      lastQuery = query;
-      // Disparar eventos para que se calcule velocidad/teóricas
-      selectEl.dispatchEvent(new Event('input', { bubbles:true }));
-      selectEl.dispatchEvent(new Event('change', { bubbles:true }));
-    }
-
-    selectEl.addEventListener('keydown', (e)=>{
-      // Teclas de control para ciclar con Enter
-      if (e.key === 'Enter'){
-        if (lastQuery){
-          e.preventDefault();
-          jumpToNext(lastQuery);
-        }
-        return;
-      }
-      // Ignorar navegación y modificadores
-      if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home','End','PageUp','PageDown','Tab','Escape'].includes(e.key)) return;
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
-
-      // Caracter imprimible
-      if (e.key.length === 1){
-        buffer += e.key;
-        jumpToNext(buffer);
-        resetBufferSoon();
-      } else if (e.key === 'Backspace') {
-        buffer = buffer.slice(0, -1);
-        if (buffer) jumpToNext(buffer);
-        resetBufferSoon();
-      }
-    });
-
-    // Al cambiar selección manualmente, actualizamos índices
-    selectEl.addEventListener('change', ()=>{
-      lastIndex = selectEl.selectedIndex;
-    });
-    // Al enfocar, resetea buffer
-    selectEl.addEventListener('focus', ()=>{
-      buffer = '';
-      lastQuery = '';
-      lastIndex = selectEl.selectedIndex;
+    holder.innerHTML = `
+      <input id="${prefix}_producto" list="${prefix}_prod_list" placeholder="Escriba para buscar y seleccione…" />
+      <datalist id="${prefix}_prod_list"></datalist>
+      <div id="${prefix}_prod_err" class="error-msg">Seleccione un producto válido para asignar la velocidad programada.</div>
+      <div class="hint">Empiece a escribir para filtrar y seleccione un producto de la lista.</div>
+    `;
+    const dl = document.getElementById(`${prefix}_prod_list`);
+    dl.innerHTML = '';
+    PROFILE.productos.forEach(p=>{
+      const opt = document.createElement('option');
+      // En datalist el valor visible es "value"
+      // Colocamos el label completo para que el usuario lo vea/tome
+      opt.value = p.label;
+      dl.appendChild(opt);
     });
   }
 
@@ -415,9 +351,7 @@
         <div class="grid">
           <div class="col-12">
             <label for="${prefix}_producto">Producto</label>
-            <select id="${prefix}_producto"></select>
-            <div id="${prefix}_prod_err" class="error-msg">Seleccione un producto válido para asignar la velocidad programada.</div>
-            <div class="hint">Sugerencia: con la lista abierta, teclee parte del nombre para saltar entre coincidencias. Enter cicla por las coincidencias.</div>
+            <div id="${prefix}_prod_holder"></div>
           </div>
 
           <div class="col-6">
@@ -587,21 +521,32 @@
   buildEnvaseUI();
   buildEmpaqueUI();
 
-  // Rellenar selects de productos y aplicar el “mejorador” de búsqueda
-  document.querySelectorAll('select[id$="_producto"]').forEach(sel => {
-    renderProductos(sel);
-    enhanceSelectSearch(sel);
+  // ======= Instanciar controladores de lotes =======
+  const lotPrefixes = [];
+  PROFILE.envase.secciones.forEach(sec=>{
+    for(let i=1;i<=PROFILE.envase.lotesPorSeccion;i++){
+      lotPrefixes.push(`env_${sec.toLowerCase()}_l${i}`);
+    }
+  });
+  PROFILE.empaque.secciones.forEach(sec=>{
+    for(let i=1;i<=PROFILE.empaque.lotesPorSeccion;i++){
+      lotPrefixes.push(`emp_${sec.toLowerCase()}_l${i}`);
+    }
   });
 
-  // ======= Controlador de Lote (parametrizado) =======
+  // Pintar datalist de productos en cada lote
+  lotPrefixes.forEach(pref => renderProductosDatalist(pref));
+
   function setupLot(prefix){
     const root = document.getElementById(`${prefix}_card`);
     const speedSource = root?.dataset.speedSource || 'envase';
     const cicloPenalty = Number(root?.dataset.cicloPenalty || 0);
 
+    // Producto (input + datalist)
     const env_producto = document.getElementById(`${prefix}_producto`);
     const prod_err = document.getElementById(`${prefix}_prod_err`);
 
+    // Datos básicos
     const env_lote = document.getElementById(`${prefix}_lote`);
     const env_inicio = document.getElementById(`${prefix}_inicio`);
     const env_fin = document.getElementById(`${prefix}_fin`);
@@ -610,6 +555,7 @@
     const cambios_turno = document.getElementById(`${prefix}_ciclos_turno`);
     const ciclos_envasados = document.getElementById(`${prefix}_ciclos_envasados`);
 
+    // KPIs
     const unid_teoricas = document.getElementById(`${prefix}_unid_teoricas`);
     const unid_reales = document.getElementById(`${prefix}_unid_reales`);
     const productividad = document.getElementById(`${prefix}_productividad`);
@@ -644,8 +590,7 @@
     const ralistData = [];
 
     function getSelectedSpeed(){
-      const val = env_producto.value || '';
-      const v = getProductSpeed(val, speedSource);
+      const v = getProductSpeedByText(env_producto.value || '', speedSource);
       return isFinite(v) && v>0 ? v : NaN;
     }
     function updateVelocidadProgramada(){
@@ -785,7 +730,7 @@
         calc_err.classList.add('show');
         setAtrasoMinutos(0); validateParosVsAtraso(); updateProductividad(); return;
       }
-      if(!env_producto.value){
+      if(!(env_producto.value||'').trim()){
         setAtrasoMinutos(0); validateParosVsAtraso(); updateProductividad(); return;
       }
       if(!inicio){
@@ -794,7 +739,7 @@
         setAtrasoMinutos(0); validateParosVsAtraso(); updateProductividad(); return;
       }
       if(!isFinite(velProg) || velProg<=0){
-        calc_err.textContent = 'Seleccione el Producto para asignar la velocidad programada.';
+        calc_err.textContent = 'Seleccione un Producto válido para asignar la velocidad programada.';
         calc_err.classList.add('show');
         setAtrasoMinutos(0); validateParosVsAtraso(); updateProductividad(); return;
       }
@@ -847,7 +792,7 @@
     }
 
     function buildLotMessage(title){
-      if(!env_producto.value) return '';
+      if(!(env_producto.value||'').trim()) return '';
       const iniDT=parseDateTimeLocal(env_inicio.value); 
       const finDT=parseDateTimeLocal(env_fin.value);
       const ini=iniDT?fmtDateTime(iniDT):'N/A'; 
@@ -900,12 +845,13 @@
       return lines.join('\n');
     }
 
+    // Eventos
     ;[fecha,turnoSel,env_inicio,env_fin,vel_real,cambios_turno].forEach(el=>{
       el.addEventListener('input', updateCalculos);
       el.addEventListener('change', updateCalculos);
     });
+    env_producto.addEventListener('input', ()=>{ updateVelocidadProgramada(); updateCalculos(); });
     env_producto.addEventListener('change', ()=>{ updateVelocidadProgramada(); updateCalculos(); });
-    env_producto.addEventListener('input',  ()=>{ updateVelocidadProgramada(); updateCalculos(); });
 
     unid_reales.addEventListener('input',  ()=>{ updateProductividad(); recalcAtraso(); validateParosVsAtraso(); });
     unid_reales.addEventListener('change', ()=>{ updateProductividad(); recalcAtraso(); validateParosVsAtraso(); });
@@ -938,9 +884,9 @@
     return {
       updateCalculos, updateProductividad, recalcAtraso, updateVelocidadProgramada,
       buildLotMessage,
-      isActive: () => Boolean(env_producto.value),
+      isActive: () => Boolean((env_producto.value||'').trim()),
       validateRequired: () => {
-        if(!env_producto.value) return true; // opcional si no hay producto
+        if(!(env_producto.value||'').trim()) return true; // opcional si no hay producto
         if(!env_inicio.value){ alert('['+ titleFromPrefix(prefix) +'] Ingrese Inicio del lote.'); return false; }
         if(!vel_prog.value){ alert('['+ titleFromPrefix(prefix) +'] La velocidad programada no se ha asignado (verifique Producto).'); return false; }
         return true;
@@ -971,21 +917,7 @@
     return `${area} ${sub} – ${lot}`.trim();
   }
 
-  // ======= Instanciar controladores de lotes =======
-  const lotPrefixes = [];
-  // Envase
-  PROFILE.envase.secciones.forEach(sec=>{
-    for(let i=1;i<=PROFILE.envase.lotesPorSeccion;i++){
-      lotPrefixes.push(`env_${sec.toLowerCase()}_l${i}`);
-    }
-  });
-  // Empaque
-  PROFILE.empaque.secciones.forEach(sec=>{
-    for(let i=1;i<=PROFILE.empaque.lotesPorSeccion;i++){
-      lotPrefixes.push(`emp_${sec.toLowerCase()}_l${i}`);
-    }
-  });
-
+  // Instancia de controladores por lote
   const LotControllers = Object.fromEntries(lotPrefixes.map(p=>[p, setupLot(p)]));
 
   // ======= Validaciones de secciones =======
@@ -1121,6 +1053,27 @@
   const btn_copiar = document.getElementById('btn_copiar');
   const btn_limpiar = document.getElementById('btn_limpiar');
   const mensaje = document.getElementById('mensaje');
+
+  function fabricacionCountActive(){
+    let cnt=0;
+    for(let i=1;i<=PROFILE.fabricacion.tanques;i++){
+      const l = (document.getElementById(`fab_t${i}_lote`)?.value || '').trim();
+      const e = (document.getElementById(`fab_t${i}_estado`)?.value || '').trim();
+      const p = (document.getElementById(`fab_t${i}_pend`)?.value || '').trim();
+      const o = (document.getElementById(`fab_t${i}_obs`)?.value || '').trim();
+      if (l || e || p || o) cnt++;
+    }
+    return cnt;
+  }
+  function envaseCountLineasActivas(){
+    let active = 0;
+    PROFILE.envase.secciones.forEach(sec=>{
+      const p1 = LotControllers[`env_${sec.toLowerCase()}_l1`];
+      const p2 = LotControllers[`env_${sec.toLowerCase()}_l2`];
+      if ((p1 && p1.isActive()) || (p2 && p2.isActive())) active++;
+    });
+    return active;
+  }
 
   function validateBeforeGenerate(){
     if(!fecha.value){ alert('Seleccione la Fecha del turno.'); return false; }
