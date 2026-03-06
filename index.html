@@ -52,6 +52,9 @@
   .lot-title { font-weight:700; margin-bottom:.45rem; }
   .inline-note { font-size:.85rem; color:#6b7280; margin:.2rem 0 .5rem; }
   .alert-line { margin-top:.4rem; font-size:.9rem; }
+
+  /* Pequeño estilo para el buscador de producto */
+  .prod-search { margin-bottom:.35rem; }
 </style>
 </head>
 <body>
@@ -59,7 +62,7 @@
   <h1>Entrega de turno – Esterilización Terminal</h1>
   <div class="sub">
     <span>Cálculo de teóricas (Turno ∩ Lote), casino, pausas, cambios de ciclo, paros y WhatsApp.</span>
-    <span class="version" id="app_version">et-1.0.0 · clic para recargar</span>
+    <span class="version" id="app_version">et-1.0.1 · clic para recargar</span>
   </div>
 </header>
 
@@ -127,7 +130,7 @@
 
 <script>
 (function(){
-  const APP_VERSION = 'et-1.0.0';
+  const APP_VERSION = 'et-1.0.1';
 
   // ================== PERFIL DE PLANTA (CONFIG) ==================
   const PROFILE = {
@@ -207,6 +210,7 @@
   function two(n){ return String(n).padStart(2,'0'); }
   function fmtDateTime(d){ if(!d) return ''; return `${d.getFullYear()}-${two(d.getMonth()+1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}`; }
   function minutesBetween(a,b){ return (b-a)/60000; }
+  function cap(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
 
   // ======= Turnos =======
   const fecha = document.getElementById('fecha');
@@ -285,17 +289,36 @@
     if(speedSource === 'empaque') return Number(p.speedPack);
     return Number(p.speedEnv);
   }
-  function renderProductos(selectEl, speedSource){
-    // speedSource no cambia el listado, solo la velocidad programada que se asignará
+  function renderProductos(selectEl){
     selectEl.innerHTML = '';
     selectEl.appendChild(new Option('-- Seleccione --',''));
     PROFILE.productos.forEach(p => {
       const opt=new Option(p.label, p.value);
-      // guardamos ambas velocidades para referencia
       opt.dataset.env = String(p.speedEnv);
       opt.dataset.pack = String(p.speedPack);
       selectEl.appendChild(opt);
     });
+  }
+  function filterSelectOptions(selectEl, query){
+    const q = (query||'').toLowerCase();
+    const current = selectEl.value;
+    // reconstruir
+    selectEl.innerHTML = '';
+    selectEl.appendChild(new Option('-- Seleccione --',''));
+    PROFILE.productos
+      .filter(p => p.label.toLowerCase().includes(q) || p.value.toLowerCase().includes(q))
+      .forEach(p => {
+        const opt=new Option(p.label, p.value);
+        opt.dataset.env = String(p.speedEnv);
+        opt.dataset.pack = String(p.speedPack);
+        selectEl.appendChild(opt);
+      });
+    // restaurar selección si corresponde
+    if ([...selectEl.options].some(o=>o.value===current)) {
+      selectEl.value = current;
+    } else {
+      selectEl.value = '';
+    }
   }
 
   // ======= Plantillas UI =======
@@ -329,14 +352,13 @@
   }
 
   function htmlLot(prefix, title, speedSource, cicloPenalty){
-    // prefix ejemplo: env_sachet_l1  (área_subsección_loteN)
-    // speedSource: 'envase'|'empaque'
     return `
       <div class="lot-card" id="${prefix}_card" data-speed-source="${speedSource}" data-ciclo-penalty="${cicloPenalty}">
         <div class="lot-title">${title}</div>
         <div class="grid">
           <div class="col-12">
-            <label for="${prefix}_producto">Producto</label>
+            <label>Producto</label>
+            <input type="text" id="${prefix}_prod_search" class="prod-search" placeholder="Buscar producto..." />
             <select id="${prefix}_producto"></select>
             <div id="${prefix}_prod_err" class="error-msg">Seleccione un producto válido para asignar la velocidad programada.</div>
           </div>
@@ -411,14 +433,21 @@
 
         <div class="rowline"></div>
 
-        <!-- Retraso alistamiento -->
+        <!-- Retraso alistamiento (MÚLTIPLES ÍTEMS) -->
         <div class="grid">
-          <div class="col-12"><b>Retraso alistamiento</b> <span class="muted">No se suma al atraso ni al total de paros.</span></div>
+          <div class="col-12">
+            <b>Retraso alistamiento</b>
+            <span class="muted">No se suma al atraso ni al total de paros.</span>
+            <span class="badge">Total: <span id="${prefix}_ralist_sum">0</span> min</span>
+          </div>
           <div class="col-12">
             <div class="paro-form">
               <input type="number" id="${prefix}_ralist_min" min="0" step="1" placeholder="Minutos" />
               <input type="text" id="${prefix}_ralist_just" placeholder="Justificación..." />
+              <button class="ghost" type="button" id="${prefix}_ralist_add">Agregar</button>
             </div>
+            <div id="${prefix}_ralist_err" class="error-msg">Ingrese minutos (&gt;0). Justificación opcional.</div>
+            <ul class="paro-list" id="${prefix}_ralist_list"></ul>
           </div>
         </div>
 
@@ -450,7 +479,14 @@
     `;
   }
 
-  function cap(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
+  // Render Fabricación
+  (function renderFabricacion(){
+    let html='';
+    for(let i=1;i<=PROFILE.fabricacion.tanques;i++){
+      html += htmlFabricacionTanque(i);
+    }
+    fabContainer.innerHTML = html;
+  })();
 
   function buildEnvaseUI(){
     PROFILE.envase.secciones.forEach(secName => {
@@ -490,23 +526,13 @@
     });
   }
 
-  // Render Fabricación
-  (function renderFabricacion(){
-    let html='';
-    for(let i=1;i<=PROFILE.fabricacion.tanques;i++){
-      html += htmlFabricacionTanque(i);
-    }
-    fabContainer.innerHTML = html;
-  })();
-
   // Render Envase y Empaque
   buildEnvaseUI();
   buildEmpaqueUI();
 
-  // Rellenar selects de productos
+  // Rellenar selects de productos + primer filtro vacío
   document.querySelectorAll('select[id$="_producto"]').forEach(sel => {
-    const speedSrc = sel.closest('.lot-card')?.dataset.speedSource || 'envase';
-    renderProductos(sel, speedSrc);
+    renderProductos(sel);
   });
 
   // ======= Controlador de Lote (parametrizado) =======
@@ -515,8 +541,12 @@
     const speedSource = root?.dataset.speedSource || 'envase';
     const cicloPenalty = Number(root?.dataset.cicloPenalty || 0);
 
+    // Producto + búsqueda
+    const prod_search = document.getElementById(`${prefix}_prod_search`);
     const env_producto = document.getElementById(`${prefix}_producto`);
     const prod_err = document.getElementById(`${prefix}_prod_err`);
+
+    // Datos básicos
     const env_lote = document.getElementById(`${prefix}_lote`);
     const env_inicio = document.getElementById(`${prefix}_inicio`);
     const env_fin = document.getElementById(`${prefix}_fin`);
@@ -525,6 +555,7 @@
     const cambios_turno = document.getElementById(`${prefix}_ciclos_turno`);
     const ciclos_envasados = document.getElementById(`${prefix}_ciclos_envasados`);
 
+    // KPIs
     const unid_teoricas = document.getElementById(`${prefix}_unid_teoricas`);
     const unid_reales = document.getElementById(`${prefix}_unid_reales`);
     const productividad = document.getElementById(`${prefix}_productividad`);
@@ -534,9 +565,13 @@
     const detalle_descuentos = document.getElementById(`${prefix}_detalle_descuentos`);
     const calc_err = document.getElementById(`${prefix}_calc_err`);
 
-    // Retraso alistamiento
+    // Retraso alistamiento (MÚLTIPLES)
     const ralist_min = document.getElementById(`${prefix}_ralist_min`);
     const ralist_just = document.getElementById(`${prefix}_ralist_just`);
+    const ralist_add = document.getElementById(`${prefix}_ralist_add`);
+    const ralist_list = document.getElementById(`${prefix}_ralist_list`);
+    const ralist_err = document.getElementById(`${prefix}_ralist_err`);
+    const ralist_sum = document.getElementById(`${prefix}_ralist_sum`);
 
     // Paros
     const paros_alerta = document.getElementById(`${prefix}_paros_alerta`);
@@ -552,7 +587,9 @@
       btn:  document.getElementById(`${prefix}_add_${c}`),
     }]));
     const parosData = { equipo:[], proceso:[], alistamiento:[], ausentismo:[], materiales:[] };
+    const ralistData = []; // <- NUEVO
 
+    // Producto: helpers
     function getSelectedSpeed(){
       const val = env_producto.value || '';
       const v = getProductSpeed(val, speedSource);
@@ -563,6 +600,8 @@
       if (isFinite(v)) { vel_prog.value = v; prod_err && prod_err.classList.remove('show'); }
       else { vel_prog.value = ''; prod_err && prod_err.classList.add('show'); }
     }
+
+    // Atraso/Productividad
     function setAtrasoMinutos(minutos) {
       const min = Math.max(0, Math.round(Number(minutos || 0)));
       horas_atraso.value = String(min);
@@ -580,7 +619,7 @@
       }
     }
     function recalcAtraso() {
-      const velProg = Number(vel_prog?.value || 0); // unidades/min
+      const velProg = Number(vel_prog?.value || 0);
       const ut = Number(unid_teoricas?.value || 0);
       const ur = Number(unid_reales?.value || 0);
       if (!isFinite(velProg) || velProg <= 0) { setAtrasoMinutos(0); atraso_formula.textContent=''; return; }
@@ -591,6 +630,7 @@
       setAtrasoMinutos(atrasoMin);
       atraso_formula.textContent = `Fórmula: ceil((${ut} – ${ur}) / ${velProg}) = ${atrasoMin} min`;
     }
+
     function validateParosVsAtraso(){
       const atrasoMin = Number(atraso_min_detalle.dataset.minutos || 'NaN');
       const tot = Number(paros_total.textContent || 0);
@@ -619,7 +659,7 @@
         const minDiv=document.createElement('div'); minDiv.className='paro-min'; minDiv.textContent = `${Number(it.min)||0} min`;
         const justDiv=document.createElement('div'); justDiv.className='paro-just'; justDiv.textContent = it.just ?? '';
         const actions=document.createElement('div'); actions.className='paro-actions'; actions.style.marginLeft='auto';
-        const btn=document.createElement('button'); btn.setAttribute('data-del', `${prefix}:${cat}:${idx}`); btn.textContent='✖';
+        const btn=document.createElement('button'); btn.setAttribute('data-del', `${prefix}:paro:${cat}:${idx}`); btn.textContent='✖';
         actions.appendChild(btn);
         li.append(minDiv, justDiv, actions);
         list.appendChild(li);
@@ -638,18 +678,40 @@
           renderParoList(cat);
         });
       });
-      document.addEventListener('click',(e)=>{
-        const t=e.target;
-        if(t && t.matches('button[data-del]')){
-          const [p,cat,idxStr]=t.getAttribute('data-del').split(':');
-          if(p===prefix){
-            parosData[cat].splice(Number(idxStr),1);
-            renderParoList(cat);
-          }
-        }
+    }
+
+    // Retraso alistamiento (múltiples)
+    function updateRalistTotal(){
+      const tot = ralistData.reduce((a,b)=>a+(Number(b.min)||0),0);
+      ralist_sum.textContent = String(tot);
+    }
+    function renderRalistList(){
+      ralist_list.innerHTML='';
+      ralistData.forEach((it,idx)=>{
+        const li=document.createElement('li'); li.className='paro-item';
+        const minDiv=document.createElement('div'); minDiv.className='paro-min'; minDiv.textContent = `${Number(it.min)||0} min`;
+        const justDiv=document.createElement('div'); justDiv.className='paro-just'; justDiv.textContent = it.just ?? '';
+        const actions=document.createElement('div'); actions.className='paro-actions'; actions.style.marginLeft='auto';
+        const btn=document.createElement('button'); btn.setAttribute('data-del', `${prefix}:ralist:${idx}`); btn.textContent='✖';
+        actions.appendChild(btn);
+        li.append(minDiv, justDiv, actions);
+        ralist_list.appendChild(li);
+      });
+      updateRalistTotal();
+    }
+    function attachRalistHandlers(){
+      ralist_add.addEventListener('click', ()=>{
+        ralist_err.classList.remove('show');
+        const min = Math.round(Number(ralist_min.value));
+        const just = String(ralist_just.value || '');
+        if(!isFinite(min) || min<=0){ ralist_err.classList.add('show'); return; }
+        ralistData.push({min, just});
+        ralist_min.value=''; ralist_just.value='';
+        renderRalistList();
       });
     }
 
+    // Calcular
     function updateCalculos(){
       updateVelocidadProgramada();
 
@@ -715,7 +777,6 @@
       // Descuentos
       const minutosBrutos = Math.max(0, minutesBetween(winStart, winEnd));
       const descCasino = casinoMinutes(bounds, winStart, winEnd, turnoNum);
-      // Primero restamos casino y cambios de ciclo al tiempo base
       const base = Math.max(minutosBrutos - descCasino - penaltyMin, 0);
       const { work: minutosTrabajo, breaks: descPausas, count: cantPausas } = computeWorkAndBreaks(base);
       const minutosEfectivos = Math.max(minutosTrabajo, 0);
@@ -724,7 +785,7 @@
       const teoricas = Math.floor(minutosEfectivos * velProg);
       unid_teoricas.value = isFinite(teoricas) ? teoricas : '';
 
-      // Detalle de descuentos
+      // Detalle
       const casinoTxt = descCasino ? ` · Casino ${descCasino} min` : '';
       const ciclosTxt = cambCiclo ? ` · Cambios de ciclo ${cambCiclo}×${cicloPenalty} = ${penaltyMin} min` : '';
       const pausasTxt = cantPausas > 0 ? ` · Pausas ${cantPausas}×${PROFILE.pausasTrabajo.pausaMinutos} = ${descPausas} min` : ' · Pausas 0 min';
@@ -736,8 +797,8 @@
       updateProductividad();
     }
 
+    // WhatsApp por lote
     function buildLotMessage(title){
-      // Consideramos "activo" si hay producto
       if(!env_producto.value) return '';
       const iniDT=parseDateTimeLocal(env_inicio.value); 
       const finDT=parseDateTimeLocal(env_fin.value);
@@ -751,11 +812,6 @@
       const atrasoMinTxt = atraso_min_detalle.dataset.minutos ? `${atraso_min_detalle.dataset.minutos} min` : 'N/D';
       const ciclosTurno = Math.max(0, Math.round(Number(cambios_turno.value || 0)));
       const ciclosEnvTxt = (ciclos_envasados.value || '').trim() || 'N/A';
-
-      // Retraso alistamiento (solo si hay datos)
-      const ralMin = Math.max(0, Math.round(Number(ralist_min.value || 0)));
-      const ralJust = String(ralist_just.value || '').trim();
-      const ralLine = (ralMin>0 || ralJust) ? `- Retraso alistamiento: ${ralMin} min${ralJust ? ' – ' + ralJust : ''}` : '';
 
       const lines=[];
       lines.push(title);
@@ -771,17 +827,21 @@
       lines.push(`- Productividad: ${prodTxt}`);
       lines.push(`- Ciclos envasados: ${ciclosEnvTxt}`);
       lines.push(`- Horas de atraso: ${atrasoMinTxt}`);
-      if(ralLine) lines.push(ralLine);
+
+      // Retraso alistamiento (múltiples)
+      if (ralistData.length > 0){
+        lines.push('');
+        lines.push('RETRASO ALISTAMIENTO');
+        ralistData.forEach(it=> lines.push(`• ${Number(it.min)||0} min – ${it.just||''}`));
+        const tot = ralistData.reduce((a,b)=>a+(Number(b.min)||0),0);
+        lines.push(`Total retraso alistamiento: ${tot} min`);
+      }
+
       lines.push('');
       lines.push('PAROS');
-
       const labels={equipo:'Equipo', proceso:'Proceso', alistamiento:'Alistamiento', ausentismo:'Ausentismo', materiales:'Materiales'};
       for(const [cat,label] of Object.entries(labels)){
-        const arr = (function(){
-          // snapshot de parosData:
-          // NOTA: parosData está en el cierre; lo usamos directamente
-          return parosData[cat] || [];
-        })();
+        const arr = (function(){ return parosData[cat] || []; })();
         const catTotal = arr.reduce((t,it)=> t + (Number(it.min)||0), 0);
         lines.push(`${label}·Total: ${catTotal} min`);
         if(arr.length>0){
@@ -792,6 +852,7 @@
       return lines.join('\n');
     }
 
+    // Eventos UI
     ;[fecha,turnoSel,env_inicio,env_fin,vel_real,cambios_turno].forEach(el=>{
       el.addEventListener('input', updateCalculos);
       el.addEventListener('change', updateCalculos);
@@ -799,11 +860,42 @@
     env_producto.addEventListener('change', ()=>{ updateVelocidadProgramada(); updateCalculos(); });
     env_producto.addEventListener('input',  ()=>{ updateVelocidadProgramada(); updateCalculos(); });
 
+    // Búsqueda en producto
+    if (prod_search){
+      prod_search.addEventListener('input', ()=>{
+        filterSelectOptions(env_producto, prod_search.value);
+        updateVelocidadProgramada();
+        updateCalculos();
+      });
+    }
+
     unid_reales.addEventListener('input',  ()=>{ updateProductividad(); recalcAtraso(); validateParosVsAtraso(); });
     unid_reales.addEventListener('change', ()=>{ updateProductividad(); recalcAtraso(); validateParosVsAtraso(); });
 
     attachParoHandlers();
     cats.forEach(renderParoList);
+
+    attachRalistHandlers();
+    renderRalistList();
+
+    // Delegado para eliminar ítems (paros y ralist)
+    document.addEventListener('click',(e)=>{
+      const t=e.target;
+      if(!t || !t.matches('button[data-del]')) return;
+      const parts = t.getAttribute('data-del').split(':'); // prefix:tipo:(cat):idx
+      const pref = parts[0];
+      if (pref !== prefix) return;
+      const kind = parts[1];
+      if (kind === 'paro'){
+        const cat = parts[2]; const idx = Number(parts[3]);
+        parosData[cat].splice(idx,1);
+        renderParoList(cat);
+      } else if (kind === 'ralist'){
+        const idx = Number(parts[2]);
+        ralistData.splice(idx,1);
+        renderRalistList();
+      }
+    });
 
     return {
       updateCalculos, updateProductividad, recalcAtraso, updateVelocidadProgramada,
@@ -816,24 +908,29 @@
         return true;
       },
       clear: () => {
-        env_producto.value=''; env_lote.value=''; env_inicio.value=''; env_fin.value='';
+        if (prod_search) prod_search.value='';
+        // restaurar lista completa de productos
+        filterSelectOptions(env_producto, '');
+        env_producto.value='';
+        env_lote.value=''; env_inicio.value=''; env_fin.value='';
         vel_prog.value=''; vel_real.value=''; unid_teoricas.value=''; unid_reales.value=''; productividad.value='';
         cambios_turno.value='0'; ciclos_envasados.value='';
-        if(ralist_min) ralist_min.value='';
-        if(ralist_just) ralist_just.value='';
         setAtrasoMinutos(0);
         detalle_descuentos.textContent=''; calc_err.classList.remove('show'); calc_err.textContent='';
+
         Object.keys(parosData).forEach(k=> parosData[k]=[]);
         cats.forEach(renderParoList);
         paros_total.textContent='0'; paros_alerta.className='muted'; paros_alerta.textContent='Se validará contra el atraso calculado.';
+
+        // limpiar retraso alistamiento (múltiple)
+        ralistData.splice(0, ralistData.length);
+        renderRalistList();
       }
     };
   }
 
   function titleFromPrefix(prefix){
-    // env_sachet_l1 -> "Envase Sachet – Lote 1"
-    // emp_enfundadora_l1 -> "Empaque Enfundadora – Lote 1"
-    const parts = prefix.split('_'); // [area, subsec, lX]
+    const parts = prefix.split('_'); // [env|emp, subsec, lX]
     const area = parts[0]==='env' ? 'Envase' : (parts[0]==='emp' ? 'Empaque' : 'Sección');
     const sub = parts[1] ? cap(parts[1]) : '';
     const lot = parts[2] ? ('Lote ' + parts[2].replace('l','')) : '';
@@ -870,7 +967,6 @@
     return cnt;
   }
   function envaseCountLineasActivas(){
-    // Una línea (Sachet/Frasco/Enema) se considera activa si al menos un lote de esa línea tiene producto
     let active = 0;
     PROFILE.envase.secciones.forEach(sec=>{
       const p1 = LotControllers[`env_${sec.toLowerCase()}_l1`];
@@ -1034,7 +1130,6 @@
   btn_generar.addEventListener('click', (e)=>{
     e.preventDefault();
     if(!validateBeforeGenerate()) return;
-    // Recalcular todos los lotes
     Object.values(LotControllers).forEach(C=>{ C.updateCalculos(); C.updateProductividad(); });
 
     const text = buildMessage();
@@ -1057,7 +1152,24 @@
 
   if(!fecha.value){ fecha.valueAsDate = new Date(); }
 
-  // Inicial: forzar un primer cálculo vacío
+  // Inicial: primer cálculo vacío
+  // (Instanciación de lotes debe hacerse tras construir UI)
+  function initLotControllers(){
+    const lotPrefixes = [];
+    PROFILE.envase.secciones.forEach(sec=>{
+      for(let i=1;i<=PROFILE.envase.lotesPorSeccion;i++){
+        lotPrefixes.push(`env_${sec.toLowerCase()}_l${i}`);
+      }
+    });
+    PROFILE.empaque.secciones.forEach(sec=>{
+      for(let i=1;i<=PROFILE.empaque.lotesPorSeccion;i++){
+        lotPrefixes.push(`emp_${sec.toLowerCase()}_l${i}`);
+      }
+    });
+    return Object.fromEntries(lotPrefixes.map(p=>[p, setupLot(p)]));
+  }
+  // Ya lo hicimos arriba, solo refrescamos cálculos
+  // (LotControllers está disponible)
   Object.values(LotControllers).forEach(C=>{ C.updateVelocidadProgramada(); C.updateCalculos(); C.updateProductividad(); });
 
 })();
