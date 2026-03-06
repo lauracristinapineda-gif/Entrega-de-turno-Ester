@@ -45,7 +45,6 @@
   .paro-actions button { border:none; background:transparent; color:#dc3545; cursor:pointer; font-weight:800; }
   .error-msg { color:#dc3545; font-size:.85rem; margin-top:.25rem; display:none; }
   .show { display:block; }
-
   .sublegend { font-weight:700; margin: .3rem 0 .6rem; color:#111827; }
   .subsection { border:1px dashed #e5e7eb; border-radius:12px; padding:.7rem .7rem; margin:.6rem 0; background:#fcfcff; }
   .lot-card { border:1px solid #e5e7eb; border-radius:12px; padding:.7rem .7rem; margin:.5rem 0; background:#fff; }
@@ -59,7 +58,7 @@
   <h1>Entrega de turno – Esterilización Terminal</h1>
   <div class="sub">
     <span>Cálculo de teóricas (Turno ∩ Lote), casino, pausas, cambios de ciclo, paros y WhatsApp.</span>
-    <span class="version" id="app_version">et-1.0.3 · clic para recargar</span>
+    <span class="version" id="app_version">et-1.0.4 · clic para recargar</span>
   </div>
 </header>
 
@@ -76,7 +75,7 @@
         <label for="turno">Turno</label>
         <select id="turno" required>
           <option value="">-- Seleccione --</option>
-          <!-- Opciones se inyectan desde PROFILE -->
+          <!-- Opciones dinámicas -->
         </select>
       </div>
       <div class="col-12">
@@ -127,14 +126,13 @@
 
 <script>
 (function(){
-  const APP_VERSION = 'et-1.0.3';
+  const APP_VERSION = 'et-1.0.4';
 
-  // ================== PERFIL DE PLANTA (CONFIG) ==================
+  // ================== PERFIL (CONFIG) ==================
   const PROFILE = {
     nombre: 'ESTERILIZACIÓN TERMINAL',
     mensajeHeader: 'ENTREGA DE TURNO – ESTERILIZACIÓN TERMINAL',
 
-    // Turnos y reglas especiales
     turnos: [
       { id:'1_0700_1500', label:'Turno 1 (07:00–15:00)', turnoNum:'1', start:'07:00', end:'15:00', cross:'same' },
       { id:'2_1500_2300', label:'Turno 2 (15:00–23:00)', turnoNum:'2', start:'15:00', end:'23:00', cross:'same' },
@@ -142,7 +140,6 @@
     ],
     saturdayOverrides: { '1':'14:10', '2':'21:45' },
 
-    // Descansos
     casino: {
       '1': { time: '12:00', minutes: 40, nextDay:false },
       '2': { time: '19:00', minutes: 40, nextDay:false },
@@ -150,10 +147,9 @@
     },
     pausasTrabajo: { cadaMinutos: 120, pausaMinutos: 10 },
 
-    // Penalización por cambio de ciclo (minutos)
     cicloPenalty: { envase: 15, empaque: 20 },
 
-    // Productos con velocidades para ENVASE y EMPAQUE
+    // ----- Productos máster (no cambian) -----
     productos: [
       { value:'TRAVAD ORAL-LIMON FCOX133CC', label:'TRAVAD ORAL-LIMON FCOX133CC', speedEnv:54, speedPack:72 },
       { value:'TRAVAD ORAL-LIMON INST CAJAX48FCO', label:'TRAVAD ORAL-LIMON INST CAJAX48FCO', speedEnv:54, speedPack:72 },
@@ -189,9 +185,53 @@
       { value:'HIDRAPLUS 75MEQ+ZINC CRZA MMED', label:'HIDRAPLUS 75MEQ+ZINC CRZA MMED', speedEnv:96, speedPack:120 },
     ],
 
+    // ----- Grupos por línea (lo nuevo) -----
+    grupos: {
+      // Envase Sachet y Empaque Estuchadora
+      sachet_estuchadora: [
+        'HIDRAPLUS 75MEQ+ZINC CEREZA CAJX4SCHX100',
+        'HIDRAPLUS 75MEQ+ZINC UVA CAJX4SCHX100',
+        'HIDRAPLUS 75MEQ+ZINC MANZANA CAJX4SCHX100',
+        'HIDRAPLUS 75MEQ+ZINC CZ.SCHCAJ CAJX24PLE',
+        'HIDRAPLUS 75 MEQ+ ZINC UVA MM',
+        'HIDRAPLUS 75MEQ MANZ. CAJ CAJAX24PLE',
+        'HIDRAPLUS 75 MEQ+ZINC MANZ SCH MMED CAJ1XSCH',
+        'HIDRAPLUS 75MEQ+ZINC UVA SCH. CJ.X24PLEG',
+        'HIDRAPLUS 75MEQ CEREZA MM ZINC',
+        'HIDRAPLUS75MEQ+ZINC MNZSACMMED',
+        'HIDRAPLUS 75MEQ+ZINC UVA MMED',
+        'HIDRAPLUS 75MEQ+ZINC CRZA MMED'
+      ],
+      // Envase Frasco y Empaque Enfundadora
+      frasco_enfundadora: [
+        'TRAVAD ORAL-LIMON FCOX133CC',
+        'TRAVAD ORAL-LIMON INST CAJAX48FCO',
+        'HIDRAPLUS 75MEQ+ZINC UVA FCOX400ML',
+        'HIDRAPLUS 75MEQ+ZINC COCO FCOX400ML',
+        'HIDRAPLUS 75MEQ+ZINC UVA MM-FCOx400ML',
+        'HIDRAPLUS 75MEQ+ZINC CEREZA MM',
+        'HIDRAPLUS 75MEQ+ZINC COCO MM',
+        'HIDRAPLUS 75MEQ+ZINC CEREZA FCOX400ML',
+        'HIDRAPLUS 75MEQ+ZINC MANZANA FCO X 400 ML',
+        'HIDRAPLUS MM 75MEQ ZINC UVA FCOx400ML',
+        'HIDRAPLUS MM 75MEQ ZINC COCO FCOx400ML',
+        'HIDRAPLUS MM 75MEQ ZINC CEREZA FCOx400ML',
+        'HIDRAPLUS 75MEQ+ZINC UVA CAJ CAJX12FCO',
+        'HIDRAPLUS 75MEQ+ZINC CZ. CAJ CAJX12FCO',
+        'HIDRAPLUS 75MEQ+ZINC COCO CAJ CAJX12FCO',
+        'HIDRAPLUS 75MEQ ZINC MANZ MMED FCOX400ML',
+        'CJ. HIDRAPLUS 75MEQ+ZINC MANZ. CAJAX12FCO',
+        'HIDRAPLUS 75MEQ+ZINC MANZANA FRASCO MMED'
+      ],
+      // Envase Enema
+      enema: [
+        'TRAVAD ENEMA X 133 ML BOLSA',
+        'TRAVAD ENEMASOL.SALINA AL 2.5 BOLSAX1000ML'
+      ]
+    },
+
     parosCategorias: ['equipo','proceso','alistamiento','ausentismo','materiales'],
 
-    // Secciones
     fabricacion: { tanques: 4, minReportados: 2 },
     envase: { secciones: ['Sachet','Frasco','Enema'], lotesPorSeccion: 2, minSeccionesActivas: 2 },
     empaque: { secciones: ['Enfundadora','Estuchadora'], lotesPorSeccion: 2 }
@@ -241,7 +281,6 @@
     const turnoNum = opt.dataset.turno || '';
     const label = opt.textContent || '';
 
-    // Sábado overrides
     const isSaturday = base.getDay() === 6;
     if (isSaturday && PROFILE.saturdayOverrides && PROFILE.saturdayOverrides[String(turnoNum)]) {
       const [hh,mm] = PROFILE.saturdayOverrides[String(turnoNum)].split(':').map(Number);
@@ -276,45 +315,43 @@
     return { work, breaks: count*pz, count };
   }
 
-  // ======= Productos (con datalist) =======
+  // ======= Productos =======
   function getProductByText(txt){
     if(!txt) return null;
-    // Comparamos por label o value (insensible a mayúsculas)
     const t = String(txt).trim().toLowerCase();
-    return PROFILE.productos.find(p =>
-      p.label.toLowerCase() === t || p.value.toLowerCase() === t
-    ) || PROFILE.productos.find(p =>
-      p.label.toLowerCase() === t // prioridad exacta por label
-    ) || null;
+    return PROFILE.productos.find(p => p.label.toLowerCase() === t || p.value.toLowerCase() === t) || null;
   }
   function getProductSpeedByText(txt, speedSource){
     const p = getProductByText(txt);
     if(!p) return NaN;
     return speedSource === 'empaque' ? Number(p.speedPack) : Number(p.speedEnv);
   }
-  function renderProductosDatalist(prefix){
-    // Crea <input list="..."> y <datalist> por lote (si no existía)
-    const holder = document.getElementById(`${prefix}_prod_holder`);
-    if (!holder) return;
 
-    holder.innerHTML = `
-      <input id="${prefix}_producto" list="${prefix}_prod_list" placeholder="Escriba para buscar y seleccione…" />
-      <datalist id="${prefix}_prod_list"></datalist>
-      <div id="${prefix}_prod_err" class="error-msg">Seleccione un producto válido para asignar la velocidad programada.</div>
-      <div class="hint">Empiece a escribir para filtrar y seleccione un producto de la lista.</div>
-    `;
-    const dl = document.getElementById(`${prefix}_prod_list`);
-    dl.innerHTML = '';
-    PROFILE.productos.forEach(p=>{
-      const opt = document.createElement('option');
-      // En datalist el valor visible es "value"
-      // Colocamos el label completo para que el usuario lo vea/tome
-      opt.value = p.label;
-      dl.appendChild(opt);
-    });
+  // ======= Grupos por línea (helpers) =======
+  function allowedLabelsForPrefix(prefix){
+    // env_sachet_*  y  emp_estuchadora_*  -> grupo sachet_estuchadora
+    if (prefix.startsWith('env_sachet') || prefix.startsWith('emp_estuchadora')) {
+      return PROFILE.grupos.sachet_estuchadora;
+    }
+    // env_frasco_*  y  emp_enfundadora_* -> grupo frasco_enfundadora
+    if (prefix.startsWith('env_frasco') || prefix.startsWith('emp_enfundadora')) {
+      return PROFILE.grupos.frasco_enfundadora;
+    }
+    // env_enema_*  -> grupo enema
+    if (prefix.startsWith('env_enema')) {
+      return PROFILE.grupos.enema;
+    }
+    // Por defecto, sin filtro
+    return null;
+  }
+  function isAllowedProduct(prefix, label){
+    const allowed = allowedLabelsForPrefix(prefix);
+    if(!allowed) return true;
+    const t = String(label||'').trim().toLowerCase();
+    return allowed.some(x => x.toLowerCase() === t);
   }
 
-  // ======= Plantillas UI =======
+  // ======= UI =======
   const fabContainer = document.getElementById('fab_container');
   const envContainer = document.getElementById('env_container');
   const empContainer = document.getElementById('emp_container');
@@ -521,7 +558,7 @@
   buildEnvaseUI();
   buildEmpaqueUI();
 
-  // ======= Instanciar controladores de lotes =======
+  // ======= Lotes y datalist por grupo =======
   const lotPrefixes = [];
   PROFILE.envase.secciones.forEach(sec=>{
     for(let i=1;i<=PROFILE.envase.lotesPorSeccion;i++){
@@ -534,19 +571,39 @@
     }
   });
 
-  // Pintar datalist de productos en cada lote
-  lotPrefixes.forEach(pref => renderProductosDatalist(pref));
+  function renderProductosDatalist(prefix){
+    const holder = document.getElementById(`${prefix}_prod_holder`);
+    if (!holder) return;
+    // Construimos input+datalist
+    holder.innerHTML = `
+      <input id="${prefix}_producto" list="${prefix}_prod_list" placeholder="Escriba para buscar y seleccione…" />
+      <datalist id="${prefix}_prod_list"></datalist>
+      <div id="${prefix}_prod_err" class="error-msg">Seleccione un producto válido para esta línea.</div>
+      <div class="hint">Escriba parte del nombre para filtrar.</div>
+    `;
+    const dl = document.getElementById(`${prefix}_prod_list`);
+    const allowed = allowedLabelsForPrefix(prefix); // null -> todos
+    dl.innerHTML = '';
+    const items = PROFILE.productos
+      .filter(p => !allowed || allowed.some(a => a.toLowerCase() === p.label.toLowerCase()));
+    items.forEach(p=>{
+      const opt = document.createElement('option');
+      opt.value = p.label; // mostrará el label
+      dl.appendChild(opt);
+    });
+  }
 
+  lotPrefixes.forEach(renderProductosDatalist);
+
+  // ======= Controlador de Lote =======
   function setupLot(prefix){
     const root = document.getElementById(`${prefix}_card`);
     const speedSource = root?.dataset.speedSource || 'envase';
     const cicloPenalty = Number(root?.dataset.cicloPenalty || 0);
 
-    // Producto (input + datalist)
     const env_producto = document.getElementById(`${prefix}_producto`);
     const prod_err = document.getElementById(`${prefix}_prod_err`);
 
-    // Datos básicos
     const env_lote = document.getElementById(`${prefix}_lote`);
     const env_inicio = document.getElementById(`${prefix}_inicio`);
     const env_fin = document.getElementById(`${prefix}_fin`);
@@ -555,7 +612,6 @@
     const cambios_turno = document.getElementById(`${prefix}_ciclos_turno`);
     const ciclos_envasados = document.getElementById(`${prefix}_ciclos_envasados`);
 
-    // KPIs
     const unid_teoricas = document.getElementById(`${prefix}_unid_teoricas`);
     const unid_reales = document.getElementById(`${prefix}_unid_reales`);
     const productividad = document.getElementById(`${prefix}_productividad`);
@@ -565,7 +621,7 @@
     const detalle_descuentos = document.getElementById(`${prefix}_detalle_descuentos`);
     const calc_err = document.getElementById(`${prefix}_calc_err`);
 
-    // Retraso alistamiento (MÚLTIPLES)
+    // Retraso alistamiento (múltiples)
     const ralist_min = document.getElementById(`${prefix}_ralist_min`);
     const ralist_just = document.getElementById(`${prefix}_ralist_just`);
     const ralist_add = document.getElementById(`${prefix}_ralist_add`);
@@ -589,15 +645,24 @@
     const parosData = { equipo:[], proceso:[], alistamiento:[], ausentismo:[], materiales:[] };
     const ralistData = [];
 
-    function getSelectedSpeed(){
-      const v = getProductSpeedByText(env_producto.value || '', speedSource);
-      return isFinite(v) && v>0 ? v : NaN;
-    }
     function updateVelocidadProgramada(){
-      const v = getSelectedSpeed();
-      if (isFinite(v)) { vel_prog.value = v; prod_err && prod_err.classList.remove('show'); }
-      else { vel_prog.value = ''; prod_err && prod_err.classList.add('show'); }
+      const label = (env_producto.value||'').trim();
+      if (!label){
+        vel_prog.value=''; prod_err.classList.remove('show'); return;
+      }
+      // validamos que el producto exista en el máster
+      const v = getProductSpeedByText(label, speedSource);
+      // y que esté permitido para esta línea
+      if (!isAllowedProduct(prefix, label)){
+        vel_prog.value=''; prod_err.textContent='Producto no permitido en esta línea.'; prod_err.classList.add('show'); return;
+      }
+      if (isFinite(v) && v>0){
+        vel_prog.value = v; prod_err.classList.remove('show'); prod_err.textContent='Seleccione un producto válido para esta línea.';
+      } else {
+        vel_prog.value=''; prod_err.textContent='Producto no reconocido. Seleccione desde la lista.'; prod_err.classList.add('show');
+      }
     }
+
     function setAtrasoMinutos(minutos) {
       const min = Math.max(0, Math.round(Number(minutos || 0)));
       horas_atraso.value = String(min);
@@ -739,7 +804,7 @@
         setAtrasoMinutos(0); validateParosVsAtraso(); updateProductividad(); return;
       }
       if(!isFinite(velProg) || velProg<=0){
-        calc_err.textContent = 'Seleccione un Producto válido para asignar la velocidad programada.';
+        calc_err.textContent = 'Seleccione un Producto válido para esta línea.';
         calc_err.classList.add('show');
         setAtrasoMinutos(0); validateParosVsAtraso(); updateProductividad(); return;
       }
@@ -785,7 +850,6 @@
       const pausasTxt = cantPausas > 0 ? ` · Pausas ${cantPausas}×${PROFILE.pausasTrabajo.pausaMinutos} = ${descPausas} min` : ' · Pausas 0 min';
       detalle_descuentos.textContent = `Ventana: ${fmtDateTime(winStart)} → ${fmtDateTime(winEnd)} | Bruto: ${Math.round(minutosBrutos)} min${casinoTxt}${ciclosTxt}${pausasTxt} → Efectivo: ${Math.round(minutosEfectivos)} min`;
 
-      // Atraso, validación y productividad
       recalcAtraso();
       validateParosVsAtraso();
       updateProductividad();
@@ -821,7 +885,6 @@
       lines.push(`- Ciclos envasados: ${ciclosEnvTxt}`);
       lines.push(`- Horas de atraso: ${atrasoMinTxt}`);
 
-      // Retraso alistamiento (múltiples)
       if (ralistData.length > 0){
         lines.push('');
         lines.push('RETRASO ALISTAMIENTO');
@@ -845,12 +908,11 @@
       return lines.join('\n');
     }
 
-    // Eventos
     ;[fecha,turnoSel,env_inicio,env_fin,vel_real,cambios_turno].forEach(el=>{
       el.addEventListener('input', updateCalculos);
       el.addEventListener('change', updateCalculos);
     });
-    env_producto.addEventListener('input', ()=>{ updateVelocidadProgramada(); updateCalculos(); });
+    env_producto.addEventListener('input',  ()=>{ updateVelocidadProgramada(); updateCalculos(); });
     env_producto.addEventListener('change', ()=>{ updateVelocidadProgramada(); updateCalculos(); });
 
     unid_reales.addEventListener('input',  ()=>{ updateProductividad(); recalcAtraso(); validateParosVsAtraso(); });
@@ -862,7 +924,6 @@
     attachRalistHandlers();
     renderRalistList();
 
-    // Delegado para eliminar ítems (paros y ralist)
     document.addEventListener('click',(e)=>{
       const t=e.target;
       if(!t || !t.matches('button[data-del]')) return;
@@ -886,7 +947,8 @@
       buildLotMessage,
       isActive: () => Boolean((env_producto.value||'').trim()),
       validateRequired: () => {
-        if(!(env_producto.value||'').trim()) return true; // opcional si no hay producto
+        if(!(env_producto.value||'').trim()) return true;
+        if(!isAllowedProduct(prefix, env_producto.value)){ alert('['+ titleFromPrefix(prefix) +'] Producto no permitido en esta línea.'); return false; }
         if(!env_inicio.value){ alert('['+ titleFromPrefix(prefix) +'] Ingrese Inicio del lote.'); return false; }
         if(!vel_prog.value){ alert('['+ titleFromPrefix(prefix) +'] La velocidad programada no se ha asignado (verifique Producto).'); return false; }
         return true;
@@ -898,6 +960,7 @@
         cambios_turno.value='0'; ciclos_envasados.value='';
         setAtrasoMinutos(0);
         detalle_descuentos.textContent=''; calc_err.classList.remove('show'); calc_err.textContent='';
+        prod_err.classList.remove('show'); prod_err.textContent='Seleccione un producto válido para esta línea.';
 
         Object.keys(parosData).forEach(k=> parosData[k]=[]);
         cats.forEach(renderParoList);
@@ -917,7 +980,6 @@
     return `${area} ${sub} – ${lot}`.trim();
   }
 
-  // Instancia de controladores por lote
   const LotControllers = Object.fromEntries(lotPrefixes.map(p=>[p, setupLot(p)]));
 
   // ======= Validaciones de secciones =======
@@ -1033,13 +1095,11 @@
   }
   function clearForm(){
     ausentismos.value='';
-    // Fabricación
     for(let i=1;i<=PROFILE.fabricacion.tanques;i++){
       ['lote','estado','pend','obs'].forEach(f=>{
         const el = document.getElementById(`fab_t${i}_${f}`); if(el) el.value='';
       });
     }
-    // Lotes
     Object.values(LotControllers).forEach(C=> C.clear());
     mensaje.value=''; btn_whatsapp.disabled=true; btn_copiar.disabled=true;
     fecha.valueAsDate=new Date(); turnoSel.value='';
@@ -1054,33 +1114,21 @@
   const btn_limpiar = document.getElementById('btn_limpiar');
   const mensaje = document.getElementById('mensaje');
 
-  function fabricacionCountActive(){
-    let cnt=0;
-    for(let i=1;i<=PROFILE.fabricacion.tanques;i++){
-      const l = (document.getElementById(`fab_t${i}_lote`)?.value || '').trim();
-      const e = (document.getElementById(`fab_t${i}_estado`)?.value || '').trim();
-      const p = (document.getElementById(`fab_t${i}_pend`)?.value || '').trim();
-      const o = (document.getElementById(`fab_t${i}_obs`)?.value || '').trim();
-      if (l || e || p || o) cnt++;
-    }
-    return cnt;
-  }
-  function envaseCountLineasActivas(){
-    let active = 0;
-    PROFILE.envase.secciones.forEach(sec=>{
-      const p1 = LotControllers[`env_${sec.toLowerCase()}_l1`];
-      const p2 = LotControllers[`env_${sec.toLowerCase()}_l2`];
-      if ((p1 && p1.isActive()) || (p2 && p2.isActive())) active++;
-    });
-    return active;
-  }
-
   function validateBeforeGenerate(){
     if(!fecha.value){ alert('Seleccione la Fecha del turno.'); return false; }
     if(!turnoSel.value){ alert('Seleccione el Turno.'); return false; }
 
-    // Fabricación: mínimo 2 tanques con información
-    const fabCnt = fabricacionCountActive();
+    const fabCnt = (function(){
+      let cnt=0;
+      for(let i=1;i<=PROFILE.fabricacion.tanques;i++){
+        const l = (document.getElementById(`fab_t${i}_lote`)?.value || '').trim();
+        const e = (document.getElementById(`fab_t${i}_estado`)?.value || '').trim();
+        const p = (document.getElementById(`fab_t${i}_pend`)?.value || '').trim();
+        const o = (document.getElementById(`fab_t${i}_obs`)?.value || '').trim();
+        if (l || e || p || o) cnt++;
+      }
+      return cnt;
+    })();
     const fabMin = PROFILE.fabricacion.minReportados ?? 2;
     const fabAlert = document.getElementById('fab_alert');
     if (fabCnt < fabMin){
@@ -1093,8 +1141,15 @@
       fabAlert.className = 'alert-line ok';
     }
 
-    // Envase: mínimo 2 líneas activas
-    const envAct = envaseCountLineasActivas();
+    const envAct = (function(){
+      let active = 0;
+      PROFILE.envase.secciones.forEach(sec=>{
+        const p1 = LotControllers[`env_${sec.toLowerCase()}_l1`];
+        const p2 = LotControllers[`env_${sec.toLowerCase()}_l2`];
+        if ((p1 && p1.isActive()) || (p2 && p2.isActive())) active++;
+      });
+      return active;
+    })();
     const envMin = PROFILE.envase.minSeccionesActivas ?? 2;
     const envAlert = document.getElementById('env_alert');
     if (envAct < envMin){
@@ -1107,7 +1162,6 @@
       envAlert.className = 'alert-line ok';
     }
 
-    // Validar cada lote activo (inicio/velocidad)
     for(const [pref, C] of Object.entries(LotControllers)){
       if(!C.validateRequired()) return false;
     }
@@ -1118,7 +1172,6 @@
     e.preventDefault();
     if(!validateBeforeGenerate()) return;
     Object.values(LotControllers).forEach(C=>{ C.updateCalculos(); C.updateProductividad(); });
-
     const text = buildMessage();
     mensaje.value = text;
     btn_whatsapp.disabled=false; btn_copiar.disabled=false;
@@ -1139,7 +1192,8 @@
 
   if(!fecha.value){ fecha.valueAsDate = new Date(); }
 
-  // Inicial: cálculos en blanco
+  // Instanciar controladores (después de construir UI y datalists)
+  const LotControllers = Object.fromEntries(lotPrefixes.map(p=>[p, setupLot(p)]));
   Object.values(LotControllers).forEach(C=>{ C.updateVelocidadProgramada(); C.updateCalculos(); C.updateProductividad(); });
 
 })();
