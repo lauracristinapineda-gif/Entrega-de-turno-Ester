@@ -140,7 +140,10 @@
       { id:'2_1500_2300', label:'Turno 2 (15:00–23:00)', turnoNum:'2', start:'15:00', end:'23:00', cross:'same' },
       { id:'3_2300_0700', label:'Turno 3 (23:00–07:00)', turnoNum:'3', start:'23:00', end:'07:00', cross:'next' },
     ],
-    saturdayOverrides: { '1':'14:10', '2':'21:45' },
+saturdayOverrides: {
+  '1': { start:'06:35', end:'14:10' },
+  '2': { start:'14:10', end:'21:45' }
+},
 
     // Descansos
     casino: {
