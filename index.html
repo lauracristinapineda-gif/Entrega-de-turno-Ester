@@ -228,32 +228,49 @@ saturdayOverrides: {
     });
   })();
 
-  function getShiftBoundsLocal(dateStr){
-    if(!dateStr || !turnoSel || !turnoSel.value) return null;
-    const opt = turnoSel.selectedOptions && turnoSel.selectedOptions[0];
-    if(!opt) return null;
-    const base = parseDateOnlyLocal(dateStr);
-    const startHM = (opt.dataset.start || '07:00').split(':').map(Number);
-    const endHM   = (opt.dataset.end   || '15:00').split(':').map(Number);
-    const cross   = (opt.dataset.cross || 'same');
+ function getShiftBoundsLocal(dateStr){
+  if(!dateStr || !turnoSel || !turnoSel.value) return null;
 
-    const start = new Date(base); start.setHours(startHM[0]||0, startHM[1]||0, 0, 0);
-    const end = new Date(base);   end.setHours(endHM[0]||0,   endHM[1]||0,   0, 0);
-    if(cross==='next' || end <= start){ end.setDate(end.getDate()+1); }
+  const opt = turnoSel.selectedOptions && turnoSel.selectedOptions[0];
+  if(!opt) return null;
 
-    const turnoNum = opt.dataset.turno || '';
-    const label = opt.textContent || '';
+  const base = parseDateOnlyLocal(dateStr);
 
-    // Sábado overrides
-    const isSaturday = base.getDay() === 6;
-    if (isSaturday && PROFILE.saturdayOverrides && PROFILE.saturdayOverrides[String(turnoNum)]) {
-      const [hh,mm] = PROFILE.saturdayOverrides[String(turnoNum)].split(':').map(Number);
-      end.setFullYear(base.getFullYear(), base.getMonth(), base.getDate());
-      end.setHours(hh||0, mm||0, 0, 0);
-    }
-    return { start, end, turnoNum, label };
+  const startHM = (opt.dataset.start || '07:00').split(':').map(Number);
+  const endHM   = (opt.dataset.end   || '15:00').split(':').map(Number);
+  const cross   = (opt.dataset.cross || 'same');
+
+  let start = new Date(base);
+  start.setHours(startHM[0]||0, startHM[1]||0, 0, 0);
+
+  let end = new Date(base);
+  end.setHours(endHM[0]||0, endHM[1]||0, 0, 0);
+
+  if (cross === 'next' || end <= start) {
+    end.setDate(end.getDate() + 1);
   }
 
+  const turnoNum = opt.dataset.turno || '';
+  const label = opt.textContent || '';
+
+  // ✅ AJUSTE CORRECTO DE SÁBADO (inicio + fin)
+  const isSaturday = base.getDay() === 6;
+  const satCfg = PROFILE.saturdayOverrides?.[String(turnoNum)];
+
+  if (isSaturday && satCfg) {
+    const [sh, sm] = satCfg.start.split(':').map(Number);
+    const [eh, em] = satCfg.end.split(':').map(Number);
+
+    start = new Date(base);
+    start.setHours(sh||0, sm||0, 0, 0);
+
+    end = new Date(base);
+    end.setHours(eh||0, em||0, 0, 0);
+  }
+
+  return { start, end, turnoNum, label }; 
+}
+  
   // ======= Descansos =======
   function casinoMinutes(bounds, winStart, winEnd, turnoNum){
     const cfg = PROFILE.casino && PROFILE.casino[String(turnoNum)];
