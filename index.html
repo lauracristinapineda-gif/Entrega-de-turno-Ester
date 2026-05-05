@@ -764,21 +764,22 @@ saturdayOverrides: {
         setAtrasoMinutos(0); validateParosVsAtraso(); updateProductividad(); return;
       }
 
-      // Intersección Turno ∩ Lote
-      
-let winStart = inicio > bounds.start ? inicio : bounds.start;
-let winEnd   = fin ? (fin < bounds.end ? fin : bounds.end) : bounds.end;
+    
+// ✅ Ventana real Turno ∩ Lote (simplificada)
+const ventana = calcularVentanaTurnoLote(bounds, inicio, fin);
 
-if (winEnd <= winStart) {
+if (!ventana) {
   unid_teoricas.value = 0;
-  calc_err.textContent = 'La ventana efectiva del lote dentro del turno es 0.';
+  calc_err.textContent = 'El lote no tiene tiempo efectivo dentro del turno.';
   calc_err.classList.add('show');
   setAtrasoMinutos(0);
   validateParosVsAtraso();
   updateProductividad();
   return;
 }
-      
+
+const { winStart, winEnd } = ventana;
+
       if (fin && fin <= bounds.start){
         unid_teoricas.value = 0;
         calc_err.textContent = 'El lote terminó antes de iniciar este turno. (Ventana vacía)';
