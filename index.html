@@ -207,7 +207,21 @@ saturdayOverrides: {
   function two(n){ return String(n).padStart(2,'0'); }
   function fmtDateTime(d){ if(!d) return ''; return `${d.getFullYear()}-${two(d.getMonth()+1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}`; }
   function minutesBetween(a,b){ return (b-a)/60000; }
-  function cap(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
+ function calcularVentanaTurnoLote(bounds, inicio, fin) {
+  if (!bounds || !inicio) return null;
+
+  const turnoInicio = bounds.start;
+  const turnoFin = bounds.end;
+
+  const loteFin = fin || turnoFin;
+
+  const winStart = inicio > turnoInicio ? inicio : turnoInicio;
+  const winEnd = loteFin < turnoFin ? loteFin : turnoFin;
+
+  if (winStart >= winEnd) return null;
+
+  return { winStart, winEnd };
+}
 
   // ======= Turnos =======
   const fecha = document.getElementById('fecha');
