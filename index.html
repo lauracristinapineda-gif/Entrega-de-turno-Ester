@@ -140,10 +140,7 @@
       { id:'2_1500_2300', label:'Turno 2 (15:00–23:00)', turnoNum:'2', start:'15:00', end:'23:00', cross:'same' },
       { id:'3_2300_0700', label:'Turno 3 (23:00–07:00)', turnoNum:'3', start:'23:00', end:'07:00', cross:'next' },
     ],
-saturdayOverrides: {
-  '1': { start:'06:35', end:'14:10' },
-  '2': { start:'14:10', end:'21:45' }
-},
+    saturdayOverrides: { '1':'14:10', '2':'21:45' },
 
     // Descansos
     casino: {
@@ -207,21 +204,7 @@ saturdayOverrides: {
   function two(n){ return String(n).padStart(2,'0'); }
   function fmtDateTime(d){ if(!d) return ''; return `${d.getFullYear()}-${two(d.getMonth()+1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}`; }
   function minutesBetween(a,b){ return (b-a)/60000; }
- function calcularVentanaTurnoLote(bounds, inicio, fin) {
-  if (!bounds || !inicio) return null;
-
-  const turnoInicio = bounds.start;
-  const turnoFin = bounds.end;
-
-  const loteFin = fin || turnoFin;
-
-  const winStart = inicio > turnoInicio ? inicio : turnoInicio;
-  const winEnd = loteFin < turnoFin ? loteFin : turnoFin;
-
-  if (winStart >= winEnd) return null;
-
-  return { winStart, winEnd };
-}
+  function cap(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
 
   // ======= Turnos =======
   const fecha = document.getElementById('fecha');
@@ -242,49 +225,32 @@ saturdayOverrides: {
     });
   })();
 
- function getShiftBoundsLocal(dateStr){
-  if(!dateStr || !turnoSel || !turnoSel.value) return null;
+  function getShiftBoundsLocal(dateStr){
+    if(!dateStr || !turnoSel || !turnoSel.value) return null;
+    const opt = turnoSel.selectedOptions && turnoSel.selectedOptions[0];
+    if(!opt) return null;
+    const base = parseDateOnlyLocal(dateStr);
+    const startHM = (opt.dataset.start || '07:00').split(':').map(Number);
+    const endHM   = (opt.dataset.end   || '15:00').split(':').map(Number);
+    const cross   = (opt.dataset.cross || 'same');
 
-  const opt = turnoSel.selectedOptions && turnoSel.selectedOptions[0];
-  if(!opt) return null;
+    const start = new Date(base); start.setHours(startHM[0]||0, startHM[1]||0, 0, 0);
+    const end = new Date(base);   end.setHours(endHM[0]||0,   endHM[1]||0,   0, 0);
+    if(cross==='next' || end <= start){ end.setDate(end.getDate()+1); }
 
-  const base = parseDateOnlyLocal(dateStr);
+    const turnoNum = opt.dataset.turno || '';
+    const label = opt.textContent || '';
 
-  const startHM = (opt.dataset.start || '07:00').split(':').map(Number);
-  const endHM   = (opt.dataset.end   || '15:00').split(':').map(Number);
-  const cross   = (opt.dataset.cross || 'same');
-
-  let start = new Date(base);
-  start.setHours(startHM[0]||0, startHM[1]||0, 0, 0);
-
-  let end = new Date(base);
-  end.setHours(endHM[0]||0, endHM[1]||0, 0, 0);
-
-  if (cross === 'next' || end <= start) {
-    end.setDate(end.getDate() + 1);
+    // Sábado overrides
+    const isSaturday = base.getDay() === 6;
+    if (isSaturday && PROFILE.saturdayOverrides && PROFILE.saturdayOverrides[String(turnoNum)]) {
+      const [hh,mm] = PROFILE.saturdayOverrides[String(turnoNum)].split(':').map(Number);
+      end.setFullYear(base.getFullYear(), base.getMonth(), base.getDate());
+      end.setHours(hh||0, mm||0, 0, 0);
+    }
+    return { start, end, turnoNum, label };
   }
 
-  const turnoNum = opt.dataset.turno || '';
-  const label = opt.textContent || '';
-
-  // ✅ AJUSTE CORRECTO DE SÁBADO (inicio + fin)
-  const isSaturday = base.getDay() === 6;
-  const satCfg = PROFILE.saturdayOverrides?.[String(turnoNum)];
-
-  if (isSaturday && satCfg) {
-    const [sh, sm] = satCfg.start.split(':').map(Number);
-    const [eh, em] = satCfg.end.split(':').map(Number);
-
-    start = new Date(base);
-    start.setHours(sh||0, sm||0, 0, 0);
-
-    end = new Date(base);
-    end.setHours(eh||0, em||0, 0, 0);
-  }
-
-  return { start, end, turnoNum, label }; 
-}
-  
   // ======= Descansos =======
   function casinoMinutes(bounds, winStart, winEnd, turnoNum){
     const cfg = PROFILE.casino && PROFILE.casino[String(turnoNum)];
@@ -778,21 +744,10 @@ saturdayOverrides: {
         setAtrasoMinutos(0); validateParosVsAtraso(); updateProductividad(); return;
       }
 
-    
-// ✅ Ventana real Turno ∩ Lote (simplificada)
-const ventana = calcularVentanaTurnoLote(bounds, inicio, fin);
-
-if (!ventana) {
-  unid_teoricas.value = 0;
-  calc_err.textContent = 'El lote no tiene tiempo efectivo dentro del turno.';
-  calc_err.classList.add('show');
-  setAtrasoMinutos(0);
-  validateParosVsAtraso();
-  updateProductividad();
-  return;
-}
-
-const { winStart, winEnd } = ventana;
+      // Intersección Turno ∩ Lote
+      let winStart = new Date(Math.max(bounds.start.getTime(), inicio.getTime()));
+      let winEnd = bounds.end;
+      if (fin) winEnd = new Date(Math.min(bounds.end.getTime(), fin.getTime()));
 
       if (fin && fin <= bounds.start){
         unid_teoricas.value = 0;
