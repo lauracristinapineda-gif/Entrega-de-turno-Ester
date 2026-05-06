@@ -241,16 +241,18 @@
     const turnoNum = opt.dataset.turno || '';
     const label = opt.textContent || '';
 
-    // Sábado overrides
-    const isSaturday = base.getDay() === 6;
-    if (isSaturday && PROFILE.saturdayOverrides && PROFILE.saturdayOverrides[String(turnoNum)]) {
-      const [hh,mm] = PROFILE.saturdayOverrides[String(turnoNum)].split(':').map(Number);
-      end.setFullYear(base.getFullYear(), base.getMonth(), base.getDate());
-      end.setHours(hh||0, mm||0, 0, 0);
-    }
-    return { start, end, turnoNum, label };
-  }
+// Sábado overrides (inicio y fin especiales)
+const isSaturday = base.getDay() === 6;
+const satCfg = PROFILE.saturdayOverrides?.[String(turnoNum)];
 
+if (isSaturday && satCfg) {
+  const [sh, sm] = satCfg.start.split(':').map(Number);
+  const [eh, em] = satCfg.end.split(':').map(Number);
+
+  start.setHours(sh || 0, sm || 0, 0, 0);
+  end.setHours(eh || 0, em || 0, 0, 0);
+}
+ 
   // ======= Descansos =======
   function casinoMinutes(bounds, winStart, winEnd, turnoNum){
     const cfg = PROFILE.casino && PROFILE.casino[String(turnoNum)];
