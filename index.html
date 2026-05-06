@@ -241,12 +241,23 @@
     const turnoNum = opt.dataset.turno || '';
     const label = opt.textContent || '';
 
-    // Sábado overrides
-    const isSaturday = base.getDay() === 6;
-    if (isSaturday && PROFILE.saturdayOverrides && PROFILE.saturdayOverrides[String(turnoNum)]) {
-      const [hh,mm] = PROFILE.saturdayOverrides[String(turnoNum)].split(':').map(Number);
-      end.setFullYear(base.getFullYear(), base.getMonth(), base.getDate());
-      end.setHours(hh||0, mm||0, 0, 0);
+    // === AJUSTE SÁBADO: topes para T1/T2 en horas pérdidas ===
+    // 0 = dom, ..., 6 = sáb
+    
+const isSaturday = base.getDay() === 6;
+
+if (isSaturday) {
+  if (String(turnoNum) === '1') {
+    // Turno 1 sábado: 06:35 – 14:10
+    start.setHours(6, 35, 0, 0);
+    end.setHours(14, 10, 0, 0);
+  } 
+  else if (String(turnoNum) === '2') {
+    // Turno 2 sábado: 14:10 – 21:45
+    start.setHours(14, 10, 0, 0);
+    end.setHours(21, 45, 0, 0);
+  }
+      // T3 sin cambios   
     }
     return { start, end, turnoNum, label };
   }
